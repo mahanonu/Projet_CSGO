@@ -7,7 +7,7 @@
 		<link type="text/css" rel="stylesheet" href="main.css">
 	</head>
 	<body>
-		<div id="info">Octree threejs demo - basic collisions with static triangle mesh<br />WASD to move, space to jump, use mouse to throw balls and move the camera.</div>
+		<div id="info">Octree threejs demo - basic collisions with static triangle mesh<br />WASD to move, space to jump, leftCtrl to crouch, use mouse to throw balls and move the camera.</div>
 		<div id="container"></div>
 
 		<!-- Import maps polyfill -->
@@ -70,7 +70,7 @@
 
 			container.appendChild( stats.domElement );
 
-			const GRAVITY = 10;
+			const GRAVITY = 40;
 
 			const NUM_SPHERES = 1;
 			const SPHERE_RADIUS = 0.03;
@@ -104,6 +104,7 @@
 			const pistolDirection = new THREE.Vector3();
 
 			let playerOnFloor = false;
+			let playerCrouched = false;
 			let mouseTime = 0;
 
 			const keyStates = {};
@@ -122,6 +123,16 @@
 
 				keyStates[ event.code ] = false;
 
+				if (event.code=="ControlLeft") {
+					console.log('test')
+					if (playerCrouched){
+						uncrouch();
+					} else {
+						crouch();
+					}
+					
+				}
+
 			} );
 
 			document.addEventListener( 'mousedown', () => {
@@ -132,12 +143,15 @@
 
 			} );
 
+			
+
 			document.addEventListener( 'mouseup', () => {
 
 				throwBall();
 
 			} );
 
+			
 			document.body.addEventListener( 'mousemove', ( event ) => {
 
 				if ( document.pointerLockElement === document.body ) {
@@ -147,8 +161,6 @@
 					camera.getWorldDirection(pistolDirection);
 					const lookObject = new THREE.Vector3(-(cube.position.x+pistolDirection.x*500),-(cube.position.y+pistolDirection.y*500),-(cube.position.z+pistolDirection.z*500));
 					cube.lookAt(lookObject);
-					//console.log(camera.quaternion);
-					//console.log(cube.quaternion);
 				}
 
 			} );
@@ -165,19 +177,19 @@
 			}
 
 			function throwBall() {
-
 				const sphere = spheres[ sphereIdx ];
 
 				camera.getWorldDirection( playerDirection );
 
 				sphere.collider.center.copy( playerCollider.end ).addScaledVector( playerDirection, playerCollider.radius * 1.5 );
-				
+				//sphere.collider.center.x -= 0.2;
+				//sphere.collider.center.y-= 0.13;
 				// throw the ball with more force if we hold the button longer, and if we move forward
 
 				const impulse = 15 + 30 * ( 1 - Math.exp( ( mouseTime - performance.now() ) * 0.001 ) );
 
 				sphere.velocity.copy( playerDirection ).multiplyScalar( impulse );
-				sphere.velocity.addScaledVector( playerVelocity, 2 );
+				//sphere.velocity.addScaledVector( playerVelocity, 2 );
 
 				
 				
@@ -188,7 +200,6 @@
 			function playerCollisions() {
 
 				const result = worldOctree.capsuleIntersect( playerCollider );
-
 				playerOnFloor = false;
 
 				if ( result ) {
@@ -204,6 +215,7 @@
 					playerCollider.translate( result.normal.multiplyScalar( result.depth ) );
 					
 				}
+				
 
 			}
 
@@ -225,7 +237,7 @@
 				const deltaPosition = playerVelocity.clone().multiplyScalar( deltaTime );
 				playerCollider.translate( deltaPosition );
 
-				playerCollisions();
+				playerCollisions(); 
 
 				camera.position.copy( playerCollider.end );
 				cube.position.copy(playerCollider.start);
@@ -306,15 +318,13 @@
 
 					sphere.collider.center.addScaledVector( sphere.velocity, deltaTime );
 					const result = worldOctree.sphereIntersect( sphere.collider );
-
 					if ( result ) {
-
 						sphere.velocity.addScaledVector(0);
 						sphere.collider.center.add( result.normal.multiplyScalar( result.depth ) );
 						return;
 					} 
 
-					const damping = Math.exp( 1.5 * deltaTime ) - 1;
+					const damping = Math.exp( 2 * deltaTime ) - 1;
 					sphere.velocity.addScaledVector( sphere.velocity, damping );
 
 					playerSphereCollision( sphere );
@@ -350,6 +360,16 @@
 
 				return playerDirection;
 
+			}
+
+			function crouch(){
+				playerCollider.end.y -= 0.25;
+				playerCrouched = true;
+			}
+
+			function uncrouch(){
+				playerCollider.end.y += 0.25;
+				playerCrouched = false; 
 			}
 
 			function controls( deltaTime ) {
@@ -426,7 +446,9 @@
 			} );
 
 			const geometry = new THREE.BoxGeometry( 0.1, 0.1, 0.1 );
-			const material = new THREE.MeshBasicMaterial( {color: 0x00ff00, side: THREE.DoubleSide} );
+			const material = new THREE.MeshBasicMaterial( {color: 0x0ff000, side: THREE.DoubleSide} );
+			material.opacity = 0;
+			material.transparent = true;
 			const cube = new THREE.Mesh( geometry, material );
 			cube.position.copy(playerCollider.start);
 			scene.add( cube );
@@ -453,6 +475,26 @@
 				animate();
 			} );
 
+			const loaderRagdoll = new GLTFLoader().setPath( './Models/Ragdoll/' );
+
+			loaderRagdoll.load('scene.glb', ( gltf )=> {
+				scene.add(gltf.scene);
+				gltf.scene.position.copy(new THREE.Vector3(-24.95905516483311,2.200857718172846,10.843469956265487));
+				gltf.scene.scale.copy(new THREE.Vector3(0.015,0.015,0.015));
+				gltf.scene.traverse( child => {
+					if ( child.isMesh ) {
+							
+							if ( child.material.map ) {
+								child.material.map.anisotropy = 8;
+							}
+
+							child.castShadow = true;
+							child.receiveShadow = true;
+							
+					};
+				})
+				animate();
+			} );
 			
 
 			function teleportPlayerIfOob() {
@@ -484,7 +526,7 @@
 					updatePlayer( deltaTime );
 
 					updateSpheres( deltaTime );
-
+					
 					teleportPlayerIfOob();
 
 				}
